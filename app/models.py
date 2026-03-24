@@ -1,0 +1,21 @@
+from sqlalchemy import Column, Integer, String, Text, DateTime
+from datetime import datetime, timezone
+from .database import Base
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String, index=True) # Renamed from channel_id for generality
+    role = Column(String)  # 'system', 'user', 'assistant', 'tool'
+    content = Column(Text)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    user_id = Column(String, primary_key=True, index=True)
+    preferred_model = Column(String, default="gemma3n:e4b")
+    preferred_temp_unit = Column(String, default="Celsius")
+    preferred_lang = Column(String, default="en")
+    timezone = Column(String, default="UTC")
