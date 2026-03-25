@@ -18,6 +18,12 @@ class ChatRequest(BaseModel):
     attachments: Optional[List[dict]] = None
     config_override: Optional[dict] = None
 
+class UserUpdate(BaseModel):
+    preferred_model: Optional[str] = None
+    preferred_temp_unit: Optional[str] = None
+    preferred_lang: Optional[str] = None
+    timezone: Optional[str] = None
+
 @app.get("/health")
 def health():
     return {"status": "healthy"}
@@ -45,6 +51,29 @@ async def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
 def get_session(session_id: str, db: Session = Depends(database.get_db)):
     history = db.query(models.ChatMessage).filter(models.ChatMessage.session_id == session_id).all()
     return history
+
+@app.get("/v1/users/{user_id}")
+def get_user_profile(user_id: str, db: Session = Depends(database.get_db)):
+    profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+    if not profile:
+        return {"user_id": user_id, "preferred_model": "gemma3n:e4b", "preferred_temp_unit": "Celsius", "preferred_lang": "en"}
+    return profile
+
+@app.patch("/v1/users/{user_id}")
+def update_user_profile(user_id: str, update: UserUpdate, db: Session = Depends(database.get_db)):
+    profile = db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+    if not profile:
+        profile = models.UserProfile(user_id=user_id)
+        db.add(profile)
+    
+    if update.preferred_model is not None: profile.preferred_model = update.preferred_model
+    if update.preferred_temp_unit is not None: profile.preferred_temp_unit = update.preferred_temp_unit
+    if update.preferred_lang is not None: profile.preferred_lang = update.preferred_lang
+    if update.timezone is not None: profile.timezone = update.timezone
+    
+    db.commit()
+    db.refresh(profile)
+    return profile
 
 if __name__ == "__main__":
     import uvicorn
