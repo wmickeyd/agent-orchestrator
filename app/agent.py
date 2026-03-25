@@ -7,11 +7,104 @@ from . import config, models, database
 
 logger = logging.getLogger(__name__)
 
-# Re-use your tool definitions (Shortened for brevity here)
+# Full tool definitions
 TOOLS = [
-    {"type": "function", "function": {"name": "search_web", "description": "Search the web...", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
-    {"type": "function", "function": {"name": "get_weather", "description": "Get weather...", "parameters": {"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}}},
-    # ... add others from llm.py
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Search the web for real-time news, general knowledge, or specific facts.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "The search query."}},
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current real-time weather for a specific location.",
+            "parameters": {
+                "type": "object",
+                "properties": {"location": {"type": "string", "description": "The city, state, or zip code."}},
+                "required": ["location"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_url",
+            "description": "Read and summarize the text content of a specific website URL.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "The full URL to read."}},
+                "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock_crypto_price",
+            "description": "Get the real-time price of a stock (e.g. AAPL) or crypto (e.g. BTC-USD).",
+            "parameters": {
+                "type": "object",
+                "properties": {"symbol": {"type": "string", "description": "The ticker symbol."}},
+                "required": ["symbol"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "track_lego_set",
+            "description": "Start tracking the price of a LEGO set from a LEGO.com URL.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "The LEGO.com product URL."}},
+                "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_images",
+            "description": "Search the web for images.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "The image search query."}},
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_news",
+            "description": "Get latest news headlines for a specific topic.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "The news topic to search for."}},
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_reddit",
+            "description": "Read and summarize a Reddit thread and its top comments from a URL.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "The full Reddit thread URL."}},
+                "required": ["url"]
+            }
+        }
+    }
 ]
 
 async def call_ollama_chat(messages, model, tools=None):
@@ -109,8 +202,62 @@ class AgentOrchestrator:
         return messages
 
     async def _execute_tool(self, name, args):
-        # Logic to call utility-api / webscraper
-        return f"Result of {name} is placeholder"
+        """Dispatches tool calls to the appropriate external API."""
+        logger.info(f"Executing tool: {name} with args {args}")
+        timeout = aiohttp.ClientTimeout(total=60)
+        
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                if name == "search_web":
+                    async with session.get(config.SEARCH_URL, params={"q": args.get("query")}) as r:
+                        data = await r.json()
+                        results = data.get('results', [])
+                        return "\n".join([f"- {r['title']}: {r['body']} ({r['href']})" for r in results[:4]])
+                
+                elif name == "get_weather":
+                    async with session.get(config.WEATHER_URL, params={"location": args.get("location")}) as r:
+                        data = await r.json()
+                        return f"Weather for {data['location']}: {data['condition']}, Temp: {data['temp']}, Humidity: {data['humidity']}"
+
+                elif name == "read_url":
+                    async with session.get(config.SCRAPER_URL, params={"url": args.get("url")}) as r:
+                        data = await r.json()
+                        return data.get('content', 'No content found.')[:5000]
+
+                elif name == "get_stock_crypto_price":
+                    async with session.get(config.FINANCE_URL, params={"symbol": args.get("symbol")}) as r:
+                        data = await r.json()
+                        return f"Ticker: {data['symbol']}, Price: {data['price']} {data['currency']} (Source: {data['source']})"
+
+                elif name == "track_lego_set":
+                    # Note: tracking is a POST in the scraper
+                    async with session.post(config.TRACK_URL, params={"url": args.get("url")}) as r:
+                        data = await r.json()
+                        return data.get('message', 'Update sent to tracker.')
+
+                elif name == "search_images":
+                    async with session.get(config.IMAGE_SEARCH_URL, params={"q": args.get("query")}) as r:
+                        data = await r.json()
+                        return "\n".join([f"- {r['title']}: {r['image']}" for r in data.get('results', [])[:3]])
+
+                elif name == "get_news":
+                    async with session.get(config.NEWS_URL, params={"q": args.get("query")}) as r:
+                        data = await r.json()
+                        return "\n".join([f"- {r['title']}: {r['body']} ({r['url']})" for r in data.get('results', [])[:4]])
+
+                elif name == "read_reddit":
+                    async with session.get(config.REDDIT_URL, params={"url": args.get("url")}) as r:
+                        data = await r.json()
+                        res = f"Title: {data['title']}\nContent: {data['content'][:1000]}\nComments:\n"
+                        for c in data.get('comments', []):
+                            res += f"- {c['author']}: {c['body'][:150]}\n"
+                        return res
+
+                return f"Tool {name} implemented but API returned no data."
+
+        except Exception as e:
+            logger.error(f"Error executing tool {name}: {e}")
+            return f"Error connecting to tool service: {e}"
 
     def _save_history(self, session_id, prompt, response):
         user_msg = models.ChatMessage(session_id=session_id, role="user", content=prompt)
