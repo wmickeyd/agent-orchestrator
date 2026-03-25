@@ -33,17 +33,41 @@ async def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
     orchestrator = agent.AgentOrchestrator(db)
     
     async def event_generator():
-        async for event in orchestrator.run(
-            request.session_id,
-            request.user_id,
-            request.prompt,
-            request.attachments,
-            request.config_override
-        ):
-            yield {
-                "event": event["event"],
-                "data": event["data"]
-            }
+        # Queue to handle concurrent heartbeat and agent events
+        queue = asyncio.Queue()
+        
+        async def run_agent():
+            try:
+                async for event in orchestrator.run(
+                    request.session_id,
+                    request.user_id,
+                    request.prompt,
+                    request.attachments,
+                    request.config_override
+                ):
+                    await queue.put(event)
+            except Exception as e:
+                await queue.put({"event": "error", "data": {"message": str(e)}})
+            finally:
+                # Signal the end of the stream
+                await queue.put(None)
+
+        # Start agent in background
+        task = asyncio.create_task(run_agent())
+        
+        try:
+            while True:
+                try:
+                    # Wait for an event with a timeout for the heartbeat
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if event is None: break
+                    yield event
+                except asyncio.TimeoutError:
+                    # Send a heartbeat event to keep the connection alive
+                    yield {"event": "heartbeat", "data": {"timestamp": datetime.now(timezone.utc).isoformat()}}
+        finally:
+            if not task.done():
+                task.cancel()
 
     return EventSourceResponse(event_generator())
 
