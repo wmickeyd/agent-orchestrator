@@ -143,6 +143,10 @@ class AgentOrchestrator:
 
         messages = self._assemble_messages(session_id, prompt, attachments)
         
+        # Optimization: Skip tools for very simple greetings/short queries
+        is_simple = len(prompt.strip()) < 15 and not any(w in prompt.lower() for w in ["weather", "stock", "search", "news", "track", "price"])
+        active_tools = [] if is_simple else TOOLS
+
         # 2. Multi-turn Agent Loop (Max 3 turns for safety)
         for turn in range(3):
             yield {"event": "status", "data": {"state": "thinking", "turn": turn + 1}}
@@ -151,22 +155,33 @@ class AgentOrchestrator:
             tool_calls = []
             
             try:
-                async for chunk in call_ollama_chat(messages, model, tools=TOOLS if turn == 0 else []):
-                    msg_chunk = chunk.get('message', {})
-                    
-                    # Handle Tool Calls
-                    if msg_chunk.get('tool_calls'):
-                        tool_calls.extend(msg_chunk['tool_calls'])
-                        continue
-                    
-                    # Handle Content
-                    content = msg_chunk.get('content', '')
-                    if content:
-                        full_response_content += content
-                        yield {"event": "content", "data": {"delta": content}}
-                    
-                    if chunk.get('done'):
-                        break
+                # Use current tools (only on first turn usually)
+                current_tools = active_tools if turn == 0 else []
+                
+                async def do_request(use_tools):
+                    nonlocal full_response_content
+                    async for chunk in call_ollama_chat(messages, model, tools=use_tools):
+                        msg_chunk = chunk.get('message', {})
+                        if msg_chunk.get('tool_calls'):
+                            tool_calls.extend(msg_chunk['tool_calls'])
+                            continue
+                        content = msg_chunk.get('content', '')
+                        if content:
+                            full_response_content += content
+                            yield {"event": "content", "data": {"delta": content}}
+                        if chunk.get('done'): break
+
+                try:
+                    async for event in do_request(current_tools):
+                        yield event
+                except Exception as e:
+                    if "does not support tools" in str(e).lower() and current_tools:
+                        logger.warning(f"Model {model} does not support tools. Retrying without tools...")
+                        full_response_content = "" # Reset content for retry
+                        async for event in do_request([]):
+                            yield event
+                    else:
+                        raise e
                 
                 if tool_calls:
                     yield {"event": "status", "data": {"state": "calling_tool"}}
