@@ -27,7 +27,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./agent-orchestrator
+          context: .
           platforms: linux/arm64 # Target only ARM64 (M1 Mac/Cluster)
           push: true
           tags: wmcdonald/agent-orchestrator:latest
