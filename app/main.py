@@ -5,11 +5,16 @@ from sqlalchemy.orm import Session
 from . import database, models, agent
 from pydantic import BaseModel
 from typing import List, Optional
+import asyncio
+import logging
+from datetime import datetime, timezone
 
 app = FastAPI(title="Agent Orchestrator")
 
 # Initialize database
 models.Base.metadata.create_all(bind=database.engine)
+
+logger = logging.getLogger(__name__)
 
 class ChatRequest(BaseModel):
     session_id: str
@@ -29,11 +34,11 @@ def health():
     return {"status": "healthy"}
 
 @app.post("/v1/chat")
-async def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
-    orchestrator = agent.AgentOrchestrator(db)
-    
+async def chat(request: ChatRequest):
     async def event_generator():
-        # Queue to handle concurrent heartbeat and agent events
+        # Create a fresh database session for this specific stream lifecycle
+        db = database.SessionLocal()
+        orchestrator = agent.AgentOrchestrator(db)
         queue = asyncio.Queue()
         
         async def run_agent():
@@ -47,27 +52,29 @@ async def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
                 ):
                     await queue.put(event)
             except Exception as e:
+                logger.error(f"Agent Task Error: {e}")
                 await queue.put({"event": "error", "data": {"message": str(e)}})
             finally:
-                # Signal the end of the stream
                 await queue.put(None)
 
-        # Start agent in background
         task = asyncio.create_task(run_agent())
         
         try:
             while True:
                 try:
-                    # Wait for an event with a timeout for the heartbeat
                     event = await asyncio.wait_for(queue.get(), timeout=15.0)
-                    if event is None: break
+                    if event is None:
+                        break
                     yield event
                 except asyncio.TimeoutError:
-                    # Send a heartbeat event to keep the connection alive
                     yield {"event": "heartbeat", "data": {"timestamp": datetime.now(timezone.utc).isoformat()}}
+        except Exception as e:
+            logger.error(f"Event Generator Error: {e}")
+            yield {"event": "error", "data": {"message": "Stream interrupted"}}
         finally:
             if not task.done():
                 task.cancel()
+            db.close() # CRITICAL: Close session ONLY when stream ends
 
     return EventSourceResponse(event_generator())
 
