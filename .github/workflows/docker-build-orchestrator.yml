@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'agent-orchestrator/**'
 
 jobs:
   build-and-push:
