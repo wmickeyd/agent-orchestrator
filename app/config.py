@@ -11,8 +11,8 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama-service.ai-services.svc.clus
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
 
 # Downstream APIs
-SCRAPER_BASE_URL = os.getenv("SCRAPER_BASE_URL", "http://dev-webscraper.webscraper-dev.svc.cluster.local")
-UTILITY_BASE_URL = os.getenv("UTILITY_BASE_URL", "http://dev-utility-api.utility-dev.svc.cluster.local")
+SCRAPER_BASE_URL = os.getenv("SCRAPER_BASE_URL", "http://dev-webscraper.webscraper-dev.svc.cluster.local:8000")
+UTILITY_BASE_URL = os.getenv("UTILITY_BASE_URL", "http://dev-utility-api.utility-dev.svc.cluster.local:8001")
 
 SCRAPER_URL = f"{SCRAPER_BASE_URL}/read"
 TRACK_URL = f"{SCRAPER_BASE_URL}/track"
