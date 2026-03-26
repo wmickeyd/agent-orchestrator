@@ -35,13 +35,14 @@ def health():
 
 @app.post("/v1/chat")
 async def chat(request: ChatRequest):
+    logger.info(f"New chat request: {request.session_id} - {request.prompt[:50]}...")
     async def event_generator():
-        # Create a fresh database session for this specific stream lifecycle
         db = database.SessionLocal()
         orchestrator = agent.AgentOrchestrator(db)
         queue = asyncio.Queue()
         
         async def run_agent():
+            logger.info(f"Starting run_agent task for {request.session_id}")
             try:
                 async for event in orchestrator.run(
                     request.session_id,
@@ -50,11 +51,13 @@ async def chat(request: ChatRequest):
                     request.attachments,
                     request.config_override
                 ):
+                    logger.debug(f"Agent event: {event['event']}")
                     await queue.put(event)
             except Exception as e:
-                logger.error(f"Agent Task Error: {e}")
+                logger.error(f"CRITICAL Agent Task Error: {e}", exc_info=True)
                 await queue.put({"event": "error", "data": {"message": str(e)}})
             finally:
+                logger.info(f"Finished run_agent task for {request.session_id}")
                 await queue.put(None)
 
         task = asyncio.create_task(run_agent())

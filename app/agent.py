@@ -134,6 +134,7 @@ class AgentOrchestrator:
 
     async def run(self, session_id, user_id, prompt, attachments=None, config_override=None):
         """Main Agent Loop yielding SSE events."""
+        logger.info(f"AgentOrchestrator.run started for session {session_id}")
         
         # 1. Setup Context
         model = config_override.get("model") if config_override else None
@@ -141,14 +142,18 @@ class AgentOrchestrator:
             profile = self.db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
             model = profile.preferred_model if profile else config.OLLAMA_MODEL
 
+        logger.info(f"Using model: {model} for session {session_id}")
         messages = self._assemble_messages(session_id, prompt, attachments)
+        logger.info(f"Assembled context: {len(messages)} messages")
         
         # Optimization: Skip tools for very simple greetings/short queries
         is_simple = len(prompt.strip()) < 15 and not any(w in prompt.lower() for w in ["weather", "stock", "search", "news", "track", "price"])
         active_tools = [] if is_simple else TOOLS
+        logger.info(f"Simple query detection: {is_simple} (Tools: {len(active_tools)})")
 
         # 2. Multi-turn Agent Loop (Max 3 turns for safety)
         for turn in range(3):
+            logger.info(f"Starting Turn {turn+1} for session {session_id}")
             yield {"event": "status", "data": {"state": "thinking", "turn": turn + 1}}
             
             full_response_content = ""
