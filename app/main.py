@@ -9,12 +9,14 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
+# Configure logging to stdout
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Agent Orchestrator")
 
 # Initialize database
 models.Base.metadata.create_all(bind=database.engine)
-
-logger = logging.getLogger(__name__)
 
 class ChatRequest(BaseModel):
     session_id: str
@@ -35,15 +37,19 @@ def health():
 
 @app.post("/v1/chat")
 async def chat(request: ChatRequest):
-    logger.info(f"New chat request: {request.session_id} - {request.prompt[:50]}...")
+    logger.info(f"ENTERING CHAT ENDPOINT: {request.session_id}")
     async def event_generator():
-        db = database.SessionLocal()
-        orchestrator = agent.AgentOrchestrator(db)
+        logger.info(f"EVENT GENERATOR STARTED: {request.session_id}")
         queue = asyncio.Queue()
         
         async def run_agent():
-            logger.info(f"Starting run_agent task for {request.session_id}")
+            logger.info(f"RUN_AGENT TASK STARTING: {request.session_id}")
+            db = None
             try:
+                logger.info("Opening DB session...")
+                db = database.SessionLocal()
+                orchestrator = agent.AgentOrchestrator(db)
+                logger.info("Starting orchestrator.run loop...")
                 async for event in orchestrator.run(
                     request.session_id,
                     request.user_id,
@@ -51,14 +57,16 @@ async def chat(request: ChatRequest):
                     request.attachments,
                     request.config_override
                 ):
-                    logger.debug(f"Agent event: {event['event']}")
                     await queue.put(event)
             except Exception as e:
                 logger.error(f"CRITICAL Agent Task Error: {e}", exc_info=True)
                 await queue.put({"event": "error", "data": {"message": str(e)}})
             finally:
-                logger.info(f"Finished run_agent task for {request.session_id}")
+                if db:
+                    logger.info("Closing DB session.")
+                    db.close()
                 await queue.put(None)
+                logger.info("RUN_AGENT TASK FINISHED.")
 
         task = asyncio.create_task(run_agent())
         
