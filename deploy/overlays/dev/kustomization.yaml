@@ -1,5 +1,0 @@
-resources:
-- ../../base
-
-namePrefix: dev-
-namespace: ai-services
