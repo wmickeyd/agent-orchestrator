@@ -147,7 +147,7 @@ class AgentOrchestrator:
             model = profile.preferred_model if profile else config.OLLAMA_MODEL
 
         logger.info(f"Using model: {model} for session {session_id}")
-        messages = self._assemble_messages(session_id, prompt, attachments)
+        messages = self._assemble_messages(session_id, prompt, attachments, profile)
         logger.info(f"Assembled context: {len(messages)} messages")
         
         # Optimization: Skip tools for very simple greetings/short queries
@@ -218,14 +218,24 @@ class AgentOrchestrator:
                 yield {"event": "error", "data": {"message": str(e)}}
                 break
 
-    def _assemble_messages(self, session_id, prompt, attachments):
-        # Implementation of history retrieval + current prompt
-        messages = [{"role": "system", "content": "You are a helpful assistant..."}]
-        
+    def _assemble_messages(self, session_id, prompt, attachments, profile=None):
+        lang = getattr(profile, "preferred_lang", "en") or "en"
+        temp_unit = getattr(profile, "preferred_temp_unit", "Celsius") or "Celsius"
+        tz = getattr(profile, "timezone", "UTC") or "UTC"
+
+        system_prompt = (
+            "You are Kelor, a helpful assistant. "
+            f"Always respond in the following language: {lang}. "
+            f"When reporting temperatures, use {temp_unit}. "
+            f"The user's local timezone is {tz}; use it when answering time-related questions."
+        )
+
+        messages = [{"role": "system", "content": system_prompt}]
+
         history = self.db.query(models.ChatMessage).filter(models.ChatMessage.session_id == session_id).order_by(models.ChatMessage.timestamp.desc()).limit(6).all()
         for msg in reversed(history):
             messages.append({"role": msg.role, "content": msg.content})
-            
+
         messages.append({"role": "user", "content": prompt})
         return messages
 
