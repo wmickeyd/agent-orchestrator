@@ -114,7 +114,11 @@ async def call_ollama_chat(messages, model, tools=None):
         "model": model,
         "messages": messages,
         "stream": True,
-        "tools": tools or []
+        "tools": tools or [],
+        "options": {
+            "num_ctx": 2048,
+            "num_predict": 512,
+        }
     }
     
     timeout = aiohttp.ClientTimeout(total=120)
@@ -214,7 +218,7 @@ class AgentOrchestrator:
         # Implementation of history retrieval + current prompt
         messages = [{"role": "system", "content": "You are a helpful assistant..."}]
         
-        history = self.db.query(models.ChatMessage).filter(models.ChatMessage.session_id == session_id).order_by(models.ChatMessage.timestamp.desc()).limit(10).all()
+        history = self.db.query(models.ChatMessage).filter(models.ChatMessage.session_id == session_id).order_by(models.ChatMessage.timestamp.desc()).limit(6).all()
         for msg in reversed(history):
             messages.append({"role": msg.role, "content": msg.content})
             
