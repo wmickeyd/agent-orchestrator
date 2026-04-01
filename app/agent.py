@@ -195,9 +195,13 @@ class AgentOrchestrator:
                 if tool_calls:
                     yield {"event": "status", "data": {"state": "calling_tool"}}
                     messages.append({"role": "assistant", "tool_calls": tool_calls})
-                    
-                    for call in tool_calls:
-                        result = await self._execute_tool(call['function']['name'], call['function']['arguments'])
+
+                    results = await asyncio.gather(*[
+                        self._execute_tool(call['function']['name'], call['function']['arguments'])
+                        for call in tool_calls
+                    ])
+
+                    for call, result in zip(tool_calls, results):
                         yield {"event": "tool_result", "data": {"tool": call['function']['name'], "output": result}}
                         messages.append({"role": "tool", "content": str(result), "tool_call_id": call.get('id', 'fixed_id')})
                     
