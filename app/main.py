@@ -85,7 +85,6 @@ async def chat(request: ChatRequest):
         finally:
             if not task.done():
                 task.cancel()
-            db.close() # CRITICAL: Close session ONLY when stream ends
 
     return EventSourceResponse(event_generator())
 
