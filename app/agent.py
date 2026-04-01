@@ -223,8 +223,13 @@ class AgentOrchestrator:
         temp_unit = getattr(profile, "preferred_temp_unit", "Celsius") or "Celsius"
         tz = getattr(profile, "timezone", "UTC") or "UTC"
 
+        now = datetime.now(timezone.utc)
+        current_date = now.strftime("%A, %B %d, %Y")
+        current_time = now.strftime("%H:%M UTC")
+
         system_prompt = (
             "You are Kelor, a helpful assistant. "
+            f"Today's date is {current_date} and the current time is {current_time}. "
             f"Always respond in the following language: {lang}. "
             f"When reporting temperatures, use {temp_unit}. "
             f"The user's local timezone is {tz}; use it when answering time-related questions. "
