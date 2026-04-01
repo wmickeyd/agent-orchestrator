@@ -116,8 +116,8 @@ async def call_ollama_chat(messages, model, tools=None):
         "stream": True,
         "tools": tools or [],
         "options": {
-            "num_ctx": 2048,
-            "num_predict": 512,
+            "num_ctx": 8192,
+            "num_predict": 1024,
         }
     }
     
@@ -141,10 +141,10 @@ class AgentOrchestrator:
         logger.info(f"AgentOrchestrator.run started for session {session_id}")
         
         # 1. Setup Context
-        model = config_override.get("model") if config_override else None
-        if not model:
-            profile = self.db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
-            model = profile.preferred_model if profile else config.OLLAMA_MODEL
+        profile = self.db.query(models.UserProfile).filter(models.UserProfile.user_id == user_id).first()
+        model = (config_override.get("model") if config_override else None) or \
+                (profile.preferred_model if profile else None) or \
+                config.OLLAMA_MODEL
 
         logger.info(f"Using model: {model} for session {session_id}")
         messages = self._assemble_messages(session_id, prompt, attachments, profile)
@@ -227,7 +227,11 @@ class AgentOrchestrator:
             "You are Kelor, a helpful assistant. "
             f"Always respond in the following language: {lang}. "
             f"When reporting temperatures, use {temp_unit}. "
-            f"The user's local timezone is {tz}; use it when answering time-related questions."
+            f"The user's local timezone is {tz}; use it when answering time-related questions. "
+            "You have access to tools for real-time data. "
+            "IMPORTANT: For any question about current stock prices, crypto prices, weather, or news, "
+            "you MUST call the appropriate tool. Never guess or use training data for these — "
+            "your training data is outdated and will give wrong answers."
         )
 
         messages = [{"role": "system", "content": system_prompt}]
