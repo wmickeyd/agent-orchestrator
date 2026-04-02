@@ -105,6 +105,18 @@ TOOLS = [
                 "required": ["url"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "summarise_youtube",
+            "description": "Fetch the transcript of a YouTube video and summarise its content.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "The full YouTube video URL."}},
+                "required": ["url"]
+            }
+        }
     }
 ]
 
@@ -353,6 +365,14 @@ class AgentOrchestrator:
                         for c in data.get('comments', []):
                             res += f"- {c['author']}: {c['body'][:150]}\n"
                         return res
+
+                elif name == "summarise_youtube":
+                    async with session.get(config.YOUTUBE_URL, params={"url": args.get("url")}) as r:
+                        data = await r.json()
+                        if "error" in data:
+                            return f"Could not fetch transcript: {data['error']}"
+                        transcript = data.get("transcript", "")
+                        return f"YouTube transcript to summarise:\n{transcript}"
 
                 return f"Tool {name} implemented but API returned no data."
 
