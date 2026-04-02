@@ -9,6 +9,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./agent_orchestrator.db")
 # Ollama
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama-service.ai-services.svc.cluster.local:11434/api/generate")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:1b")
+OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "moondream")
 
 # Downstream APIs
 SCRAPER_BASE_URL = os.getenv("SCRAPER_BASE_URL", "http://dev-webscraper.webscraper-dev.svc.cluster.local:8000")

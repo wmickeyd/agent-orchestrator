@@ -2,6 +2,7 @@ import json
 import logging
 import aiohttp
 import asyncio
+import base64
 from datetime import datetime, timezone
 from . import config, models, database
 
@@ -107,6 +108,37 @@ TOOLS = [
     }
 ]
 
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+async def describe_image(url: str) -> str:
+    """Fetch an image and ask moondream to describe it."""
+    ollama_base = config.OLLAMA_URL.rsplit("/api/", 1)[0]
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as r:
+                r.raise_for_status()
+                image_bytes = await r.read()
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        payload = {
+            "model": config.OLLAMA_VISION_MODEL,
+            "prompt": "Describe this image in detail.",
+            "images": [image_b64],
+            "stream": False,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{ollama_base}/api/generate",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=60),
+            ) as r:
+                r.raise_for_status()
+                data = await r.json()
+                return data.get("response", "").strip()
+    except Exception as e:
+        logger.error(f"Vision error for {url}: {e}")
+        return f"[Could not analyse image: {e}]"
+
+
 async def call_ollama_chat(messages, model, tools=None):
     """Low-level Ollama API caller."""
     url = config.OLLAMA_URL.replace("/generate", "/chat")
@@ -147,6 +179,22 @@ class AgentOrchestrator:
                 config.OLLAMA_MODEL
 
         logger.info(f"Using model: {model} for session {session_id}")
+
+        # Describe any image attachments with moondream before the main LLM turn
+        if attachments:
+            image_attachments = [
+                a for a in attachments
+                if any(a.get("filename", "").lower().endswith(ext) for ext in IMAGE_EXTENSIONS)
+            ]
+            if image_attachments:
+                yield {"event": "status", "data": {"state": "analysing_image"}}
+                descriptions = await asyncio.gather(*[describe_image(a["url"]) for a in image_attachments])
+                image_context = "\n".join(
+                    f"[Image '{a['filename']}': {desc}]"
+                    for a, desc in zip(image_attachments, descriptions)
+                )
+                prompt = f"{image_context}\n\n{prompt}" if prompt else image_context
+
         messages = self._assemble_messages(session_id, prompt, attachments, profile)
         logger.info(f"Assembled context: {len(messages)} messages")
         
