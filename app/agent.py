@@ -219,7 +219,13 @@ class AgentOrchestrator:
                 break
 
     def _assemble_messages(self, session_id, prompt, attachments, profile=None):
-        lang = getattr(profile, "preferred_lang", "en") or "en"
+        LANG_NAMES = {
+            "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+            "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ru": "Russian",
+            "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ar": "Arabic",
+        }
+        lang_code = getattr(profile, "preferred_lang", "en") or "en"
+        lang = LANG_NAMES.get(lang_code.lower(), lang_code)
         temp_unit = getattr(profile, "preferred_temp_unit", "Celsius") or "Celsius"
         tz = getattr(profile, "timezone", "UTC") or "UTC"
 
