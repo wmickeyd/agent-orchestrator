@@ -351,7 +351,12 @@ class AgentOrchestrator:
                 elif name == "search_images":
                     async with session.get(config.IMAGE_SEARCH_URL, params={"q": args.get("query")}) as r:
                         data = await r.json()
-                        return "\n".join([f"- {r['title']}: {r['image']}" for r in data.get('results', [])[:3]])
+                        lines = []
+                        for img in data.get('results', [])[:3]:
+                            # Use DuckDuckGo's thumbnail CDN — far more reliable than direct source URLs
+                            display_url = img.get('thumbnail') or img.get('image', '')
+                            lines.append(f"- {img.get('title', '')}: {display_url}")
+                        return "\n".join(lines)
 
                 elif name == "get_news":
                     async with session.get(config.NEWS_URL, params={"q": args.get("query")}) as r:
@@ -371,8 +376,9 @@ class AgentOrchestrator:
                         data = await r.json()
                         if "error" in data:
                             return f"Could not fetch transcript: {data['error']}"
+                        title = data.get("title", "Unknown")
                         transcript = data.get("transcript", "")
-                        return f"YouTube transcript to summarise:\n{transcript}"
+                        return f"Video title: {title}\nTranscript:\n{transcript}"
 
                 return f"Tool {name} implemented but API returned no data."
 
