@@ -120,6 +120,18 @@ TOOLS = [
                 "required": ["url"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_lego_sets",
+            "description": "Search for LEGO sets by name or number to find their product URLs and numbers from major retailers.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "The LEGO set name or number."}},
+                "required": ["query"]
+            }
+        }
     }
 ]
 
@@ -387,6 +399,17 @@ class AgentOrchestrator:
                         title = data.get("title", "Unknown")
                         transcript = data.get("transcript", "")
                         return f"Video title: {title}\nTranscript:\n{transcript}"
+
+                elif name == "search_lego_sets":
+                    async with session.get(config.LEGO_SEARCH_URL, params={"q": args.get("query")}) as r:
+                        data = await r.json()
+                        results = data.get('results', [])
+                        if not results:
+                            return "No LEGO sets found for that query."
+                        lines = ["Found the following LEGO sets:"]
+                        for res in results:
+                            lines.append(f"- {res['name']} ({res['product_number']}) at {res['retailer'].upper()}: {res['url']}")
+                        return "\n".join(lines)
 
                 return f"Tool {name} implemented but API returned no data."
 
