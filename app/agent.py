@@ -62,10 +62,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "track_lego_set",
-            "description": "Start tracking the price of a LEGO set from a LEGO.com URL.",
+            "description": "Start tracking the price of a LEGO set from a supported URL (LEGO, Amazon, Walmart, Target).",
             "parameters": {
                 "type": "object",
-                "properties": {"url": {"type": "string", "description": "The LEGO.com product URL."}},
+                "properties": {
+                    "url": {"type": "string", "description": "The product URL."},
+                    "target_price": {"type": "number", "description": "Optional: Notify when price hits this value."}
+                },
                 "required": ["url"]
             }
         }
@@ -257,7 +260,7 @@ class AgentOrchestrator:
                     messages.append({"role": "assistant", "tool_calls": tool_calls})
 
                     results = await asyncio.gather(*[
-                        self._execute_tool(call['function']['name'], call['function']['arguments'])
+                        self._execute_tool(call['function']['name'], call['function']['arguments'], user_id)
                         for call in tool_calls
                     ])
 
@@ -314,9 +317,9 @@ class AgentOrchestrator:
         messages.append({"role": "user", "content": prompt})
         return messages
 
-    async def _execute_tool(self, name, args):
+    async def _execute_tool(self, name, args, user_id=None):
         """Dispatches tool calls to the appropriate external API."""
-        logger.info(f"Executing tool: {name} with args {args}")
+        logger.info(f"Executing tool: {name} with args {args} (user: {user_id})")
         timeout = aiohttp.ClientTimeout(total=60)
         
         try:
@@ -343,8 +346,13 @@ class AgentOrchestrator:
                         return f"Ticker: {data['symbol']}, Price: {data['price']} {data['currency']} (Source: {data['source']})"
 
                 elif name == "track_lego_set":
+                    params = {"url": args.get("url")}
+                    if user_id:
+                        params["user_id"] = str(user_id)
+                    if args.get("target_price"):
+                        params["target_price"] = args.get("target_price")
                     # Note: tracking is a POST in the scraper
-                    async with session.post(config.TRACK_URL, params={"url": args.get("url")}) as r:
+                    async with session.post(config.TRACK_URL, params=params) as r:
                         data = await r.json()
                         return data.get('message', 'Update sent to tracker.')
 
